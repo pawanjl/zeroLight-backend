@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { 
   getAllUsers, 
   getUserById, 
+  getUserByEmailAndAddress,
   createUser, 
   updateUser, 
   deleteUser,
@@ -79,6 +80,54 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// GET /api/users/by-email-address - Get user by email and address combination
+router.get('/by-email-address', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, user_address } = req.query;
+
+    if (!email || typeof email !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid email',
+        message: 'Email query parameter is required and must be a string'
+      });
+      return;
+    }
+
+    if (!user_address || typeof user_address !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid user address',
+        message: 'User address query parameter is required and must be a string'
+      });
+      return;
+    }
+
+    const result = await getUserByEmailAndAddress(email, user_address);
+    
+    if (!result.success) {
+      res.status(404).json({
+        success: false,
+        error: 'User not found',
+        message: result.error
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: result.data,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // POST /api/users - Create new user
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -90,6 +139,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         success: false,
         error: 'Invalid email',
         message: 'Email is required and must be a string'
+      });
+      return;
+    }
+
+    if (!userData.user_address || typeof userData.user_address !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid user address',
+        message: 'User address is required and must be a string'
+      });
+      return;
+    }
+
+    if (!userData.userid || typeof userData.userid !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid userid',
+        message: 'Userid is required and must be a string'
       });
       return;
     }
@@ -157,6 +224,26 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
         });
         return;
       }
+    }
+
+    // Validate user_address if provided
+    if (userData.user_address && typeof userData.user_address !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid user address',
+        message: 'User address must be a string'
+      });
+      return;
+    }
+
+    // Validate userid if provided
+    if (userData.userid && typeof userData.userid !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid userid',
+        message: 'Userid must be a string'
+      });
+      return;
     }
 
     const result = await updateUser(id, userData);

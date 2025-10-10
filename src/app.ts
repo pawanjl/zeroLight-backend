@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 // Import routes
 import helloRoutes from './routes/helloRoutes';
 import userRoutes from './routes/userRoutes';
+import deviceRoutes from './routes/deviceRoutes';
 import privateBetaRoutes from './routes/privateBetaRoutes';
 
 // Load environment variables
@@ -25,6 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/api/hello', helloRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/devices', deviceRoutes);
 app.use('/api/private-beta', privateBetaRoutes);
 
 // Health check route
@@ -58,6 +60,7 @@ app.listen(PORT, () => {
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`Hello world: http://localhost:${PORT}/api/hello`);
   console.log(`Users API: http://localhost:${PORT}/api/users`);
+  console.log(`Devices API: http://localhost:${PORT}/api/devices`);
   console.log(`Private Beta API: http://localhost:${PORT}/api/private-beta`);
 });
 

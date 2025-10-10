@@ -65,19 +65,56 @@ export interface DatabaseResponse<T = any> {
 export interface User {
   id: string;
   email: string;
-  name?: string;
+  user_address: string;
+  userid: string;
   created_at: string;
   updated_at: string;
 }
 
 export interface CreateUserData {
   email: string;
-  name?: string;
+  user_address: string;
+  userid: string;
 }
 
 export interface UpdateUserData {
   email?: string;
-  name?: string;
+  user_address?: string;
+  userid?: string;
+}
+
+// Device types
+export interface Device {
+  id: string;
+  userid: string;
+  pushtoken: string;
+  installation_time: string;
+  device_id: string;
+  platform: 'ios' | 'android';
+  status: 1 | 0;
+  deviceinfo: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDeviceData {
+  userid: string;
+  pushtoken: string;
+  installation_time: string;
+  device_id: string;
+  platform: 'ios' | 'android';
+  status: 1 | 0;
+  deviceinfo: Record<string, any>;
+}
+
+export interface UpdateDeviceData {
+  userid?: string;
+  pushtoken?: string;
+  installation_time?: string;
+  device_id?: string;
+  platform?: 'ios' | 'android';
+  status?: 1 | 0;
+  deviceinfo?: Record<string, any>;
 }
 
 // Private Beta Users types
