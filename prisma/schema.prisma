@@ -1,0 +1,166 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Users Table
+model User {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  privyId              String    @unique @map("privy_id") @db.VarChar(255)
+  email                String?   @db.VarChar(255)
+  phone                String?   @db.VarChar(50)
+  
+  // Lighter Account Info
+  walletAddress        String?   @unique @map("wallet_address") @db.VarChar(42)
+  walletRegisteredAt   DateTime? @map("wallet_registered_at") @db.Timestamp(6)
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  lastActiveAt         DateTime? @map("last_active_at") @db.Timestamp(6)
+  status               String    @default("active") @db.VarChar(20)
+  
+  // Optimistic locking for concurrent updates
+  version              Int       @default(0)
+  
+  // Relations
+  sessions             Session[]
+  notificationPreferences NotificationPreferences?
+  activityLogs         ActivityLog[]
+  
+  @@index([privyId], name: "idx_privy_id")
+  @@index([walletAddress], name: "idx_wallet_address")
+  @@index([status], name: "idx_status")
+  @@map("users")
+}
+
+// Sessions Table with better constraints
+model Session {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  
+  // Device Information
+  deviceId             String    @map("device_id") @db.VarChar(255)
+  deviceName           String?   @map("device_name") @db.VarChar(100)
+  deviceModel          String?   @map("device_model") @db.VarChar(100)
+  platform             String    @db.VarChar(20)
+  osVersion            String?   @map("os_version") @db.VarChar(50)
+  appVersion           String?   @map("app_version") @db.VarChar(50)
+  
+  // Push notification token
+  pushToken            String?   @map("push_token") @db.VarChar(500)
+  pushTokenUpdatedAt   DateTime? @map("push_token_updated_at") @db.Timestamp(6)
+  
+  // Session state
+  isActive             Boolean   @default(true) @map("is_active")
+  ipAddress            String?   @map("ip_address") @db.Inet
+  
+  // Idempotency key for preventing duplicate session creation
+  idempotencyKey       String?   @unique @map("idempotency_key") @db.VarChar(255)
+  
+  // Timestamps
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  lastActivityAt       DateTime  @default(now()) @map("last_activity_at") @db.Timestamp(6)
+  expiresAt            DateTime  @map("expires_at") @db.Timestamp(6)
+  terminatedAt         DateTime? @map("terminated_at") @db.Timestamp(6)
+  terminationReason    String?   @map("termination_reason") @db.VarChar(50)
+  
+  // Relations
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityLogs         ActivityLog[]
+  
+  @@index([userId], name: "idx_user_id")
+  @@index([userId, isActive], name: "idx_user_id_active")
+  @@index([deviceId], name: "idx_device_id")
+  @@index([deviceId, userId], name: "idx_device_user")
+  @@index([isActive], name: "idx_active")
+  @@index([platform], name: "idx_platform")
+  @@index([pushToken], name: "idx_push_token")
+  @@index([idempotencyKey], name: "idx_idempotency_key")
+  @@index([expiresAt], name: "idx_expires_at")
+  @@map("sessions")
+}
+
+// Notification Preferences
+model NotificationPreferences {
+  id                       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                   String   @unique @map("user_id") @db.Uuid
+  
+  // Notification Channels
+  pushEnabled              Boolean  @default(true) @map("push_enabled")
+  emailEnabled             Boolean  @default(true) @map("email_enabled")
+  smsEnabled               Boolean  @default(false) @map("sms_enabled")
+  
+  // Notification Types
+  transactionNotifications Boolean  @default(true) @map("transaction_notifications")
+  securityAlerts           Boolean  @default(true) @map("security_alerts")
+  marketingUpdates         Boolean  @default(false) @map("marketing_updates")
+  productUpdates           Boolean  @default(true) @map("product_updates")
+  
+  // Quiet Hours
+  quietHoursEnabled        Boolean  @default(false) @map("quiet_hours_enabled")
+  quietHoursStart          DateTime? @map("quiet_hours_start") @db.Time(6)
+  quietHoursEnd            DateTime? @map("quiet_hours_end") @db.Time(6)
+  timezone                 String   @default("UTC") @db.VarChar(50)
+  
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt                DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  
+  // Relations
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId], name: "idx_notification_user_id")
+  @@map("notification_preferences")
+}
+
+// Activity Logs (Note: Partitioning is handled at database level, not in Prisma)
+model ActivityLog {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  sessionId            String?   @map("session_id") @db.Uuid
+  
+  action               String    @db.VarChar(100)
+  metadata             Json?     @db.JsonB
+  ipAddress            String?   @map("ip_address") @db.Inet
+  
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  
+  // Relations
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session              Session?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  
+  @@index([userId, createdAt(sort: Desc)], name: "idx_user_id_created")
+  @@index([sessionId], name: "idx_session_id")
+  @@index([action], name: "idx_action")
+  @@index([createdAt(sort: Desc)], name: "idx_created_at")
+  @@map("activity_logs")
+}
+
+// Distributed locks table (for preventing race conditions)
+model DistributedLock {
+  lockKey              String    @id @map("lock_key") @db.VarChar(255)
+  lockOwner            String    @map("lock_owner") @db.VarChar(255)
+  acquiredAt           DateTime  @default(now()) @map("acquired_at") @db.Timestamp(6)
+  expiresAt            DateTime  @map("expires_at") @db.Timestamp(6)
+  
+  @@index([expiresAt], name: "idx_lock_expires_at")
+  @@map("distributed_locks")
+}
+
+// Private Beta Users (keeping existing table for compatibility)
+model PrivateBetaUser {
+  id                   String    @id @default(uuid())
+  referralKey          String    @unique @map("referral_key")
+  status               String    @default("pending")
+  userEmail            String?   @map("user_email")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at")
+  
+  @@map("private_beta_users")
+}

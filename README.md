@@ -1,1341 +1,377 @@
-# Zero Light Privy - Express TypeScript API
+# ZeroLight Backend
 
-A modular Express.js application built with TypeScript, featuring clean architecture with separate routes and services layers, integrated with Supabase database.
-
-## Project Structure
-
-```
-src/
-├── app.ts                 # Main application entry point
-├── config/
-│   └── supabase.ts        # Supabase configuration
-├── routes/
-│   ├── helloRoutes.ts     # Hello world routes
-│   └── userRoutes.ts      # User CRUD routes
-├── services/
-│   ├── helloService.ts    # Hello world business logic
-│   └── databaseService.ts # Database operations
-└── types/
-    └── index.ts           # TypeScript type definitions
-```
+A production-ready Express.js backend with Prisma ORM, designed for concurrent user management, session handling, and notification preferences.
 
 ## Features
 
-- ✅ TypeScript with strict type checking
-- ✅ Modular architecture (routes + services)
-- ✅ Express.js with middleware (helmet, cors, morgan)
-- ✅ Environment variable support
-- ✅ Error handling middleware
-- ✅ Health check endpoint
-- ✅ Hello world API endpoints
-- ✅ Supabase database integration
-- ✅ User CRUD operations
-- ✅ Database connection testing
+✅ **Prisma ORM** - Type-safe database access with PostgreSQL
+✅ **Race Condition Prevention** - Distributed locking mechanism
+✅ **Optimistic Locking** - Concurrent update handling with version control
+✅ **Idempotent Operations** - Prevent duplicate requests
+✅ **Session Management** - Secure, expiring sessions with device tracking
+✅ **Notification Preferences** - Granular user notification settings
+✅ **Activity Logging** - Partitioned tables for high-volume logging
+✅ **API Versioning** - Clean v1 API structure
+✅ **Connection Pooling** - Optimized for 1000+ concurrent users
 
-## Getting Started
+## Architecture
 
-### Prerequisites
+### Database Schema
 
-- Node.js (v16 or higher)
-- npm or yarn
+The application uses PostgreSQL with the following tables:
 
-### Installation
+- **users** - User accounts with optimistic locking
+- **sessions** - Device sessions with idempotency keys
+- **notification_preferences** - Per-user notification settings
+- **activity_logs** - Partitioned by month for performance
+- **distributed_locks** - Prevents race conditions
+- **private_beta_users** - Beta access management
 
-1. Install dependencies:
-```bash
-npm install
+### Key Design Patterns
+
+#### 1. Optimistic Locking
+Users table includes a `version` field that increments on each update, preventing lost updates in concurrent scenarios.
+
+```typescript
+// Update with version check
+await updateUser(userId, updateData, currentVersion);
 ```
 
-2. Create environment file:
-```bash
-cp .env.example .env
+#### 2. Distributed Locking
+Prevents race conditions during critical operations like user creation and wallet registration.
+
+```typescript
+// Automatically handled in services
+await withLock(lockKey, async () => {
+  // Critical section - only one operation at a time
+});
 ```
 
-3. Start development server:
-```bash
-npm run dev
+#### 3. Idempotency
+Session creation uses idempotency keys to prevent duplicate sessions from retry requests.
+
+```typescript
+await createSession({
+  userId,
+  deviceId,
+  idempotencyKey: requestId, // Same key = same session
+  // ...
+});
 ```
-
-### Available Scripts
-
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Build TypeScript to JavaScript
-- `npm start` - Start production server
-- `npm run dev:watch` - Alternative development command
 
 ## API Endpoints
 
-### Health Check
-- **GET** `/health` - Server health status
+### Users API (`/api/v1/users`)
 
-### Hello World
-- **GET** `/api/hello` - Basic hello world message
-- **GET** `/api/hello/:name` - Personalized hello message
+- `GET /` - Get all users (paginated)
+- `GET /:id` - Get user by ID
+- `GET /privy/:privyId` - Get user by Privy ID
+- `GET /wallet/:walletAddress` - Get user by wallet
+- `POST /` - Create new user
+- `PUT /:id` - Update user (supports optimistic locking)
+- `POST /:id/wallet` - Register wallet address
+- `POST /:id/activity` - Update last active timestamp
+- `DELETE /:id` - Soft delete user
 
-### User Management
-- **GET** `/api/users` - Get all users
-- **GET** `/api/users/:id` - Get user by ID
-- **GET** `/api/users/by-email-address` - Get user by email and address combination
-- **POST** `/api/users` - Create new user
-- **PUT** `/api/users/:id` - Update user
-- **DELETE** `/api/users/:id` - Delete user
-- **GET** `/api/users/health/database` - Database health check
+### Sessions API (`/api/v1/sessions`)
 
-### Device Management
-- **GET** `/api/devices` - Get all devices
-- **GET** `/api/devices/:id` - Get device by ID
-- **GET** `/api/devices/user/:userid` - Get devices by userid
-- **GET** `/api/devices/by-device-id/:device_id` - Get device by device_id
-- **POST** `/api/devices` - Create new device
-- **PUT** `/api/devices/:id` - Update device
-- **PATCH** `/api/devices/:id/status` - Update device status
-- **DELETE** `/api/devices/:id` - Delete device
-- **GET** `/api/devices/health/database` - Database health check
+- `POST /` - Create new session (with idempotency)
+- `GET /:id` - Get session by ID
+- `GET /user/:userId/active` - Get active session
+- `GET /user/:userId` - Get all user sessions
+- `GET /user/:userId/stats` - Get session statistics
+- `PUT /:id` - Update session
+- `POST /:id/activity` - Update activity timestamp
+- `PUT /:id/push-token` - Update push notification token
+- `POST /:id/extend` - Extend session expiration
+- `DELETE /:id` - Terminate session
+- `DELETE /user/:userId/all` - Terminate all user sessions
 
-### Private Beta Referral System
-- **POST** `/api/private-beta/referral` - Create new unique 6-digit numeric referral key
-- **POST** `/api/private-beta/verify` - Verify referral key and activate user
-- **POST** `/api/private-beta/status` - Check user status by email
-- **GET** `/api/private-beta/users` - Get all private beta users (admin)
-- **GET** `/api/private-beta/health` - Private beta service health check
+### Notifications API (`/api/v1/notifications`)
+
+- `GET /preferences/:userId` - Get notification preferences
+- `PUT /preferences/:userId` - Update preferences
+- `POST /preferences/:userId/reset` - Reset to defaults
+
+### Private Beta API (`/api/private-beta`)
+
+**Unchanged from original implementation**
+
+- `POST /referral` - Create referral key
+- `POST /verify` - Verify referral key
+- `POST /check-validity` - Check key validity
+- `POST /status` - Check user status
+- `GET /users` - Get all beta users
+- `GET /debug` - Debug endpoint
+
+## Installation
+
+### Prerequisites
+
+- Node.js 18+
+- PostgreSQL 14+
+- npm or yarn
+
+### Setup
+
+1. **Install dependencies:**
+```bash
+   npm install
+   ```
+
+2. **Configure environment:**
+```bash
+   cp .env.example .env
+   # Edit .env with your database credentials
+   ```
+
+3. **Set up database:**
+```bash
+   # Apply SQL schema
+   psql -U your_user -d your_database -f prisma/migrations/001_initial_schema.sql
+
+   # Generate Prisma client
+   npx prisma generate
+   ```
+
+4. **Build and run:**
+```bash
+   # Development
+   npm run dev
+
+   # Production
+   npm run build
+   npm start
+   ```
 
 ## Environment Variables
 
-Create a `.env` file in the root directory:
-
 ```env
+# Server
 NODE_ENV=development
 PORT=3000
 
-# Supabase Configuration
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
+# Database (PostgreSQL)
+DATABASE_URL=postgresql://user:password@localhost:5432/zerolight?schema=public
+
+# Optional: Connection pool settings can be added to DATABASE_URL
+# Example: ?connection_limit=100&connect_timeout=10
 ```
 
-**Important**: Replace the Supabase values with your actual project credentials from the Supabase dashboard.
+## Database Migrations
+
+### Initial Setup
+
+Run the initial schema migration:
+```bash
+psql -U postgres -d zerolight < prisma/migrations/001_initial_schema.sql
+```
+
+### Activity Log Partitions
+
+Activity logs are partitioned by month. New partitions should be created before each month:
+
+```sql
+CREATE TABLE activity_logs_2026_01 PARTITION OF activity_logs
+  FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
+```
+
+Consider automating this with a cron job or scheduled task.
+
+## Concurrency & Performance
+
+### Connection Pooling
+
+Prisma handles connection pooling automatically. Configure via DATABASE_URL:
+
+```
+postgresql://user:pass@host:5432/db?connection_limit=100&connect_timeout=10
+```
+
+### Race Condition Prevention
+
+The application prevents race conditions through:
+
+1. **Distributed Locks** - Database-level locks with automatic expiration
+2. **Optimistic Locking** - Version-based conflict detection
+3. **Unique Constraints** - Database enforced uniqueness
+4. **Transactions** - ACID guarantees for multi-step operations
+
+### Handling High Concurrency
+
+The system is designed to handle 1000+ concurrent users through:
+
+- ✅ Connection pooling (configurable pool size)
+- ✅ Non-blocking async operations
+- ✅ Indexed database queries
+- ✅ Efficient lock acquisition with retries
+- ✅ Partitioned tables for high-volume data
+- ✅ Automatic cleanup of expired resources
+
+## Monitoring & Maintenance
+
+### Periodic Cleanup Tasks
+
+The application automatically runs cleanup tasks in production:
+
+- **Expired locks** - Cleaned every 5 minutes
+- **Expired sessions** - Cleaned every 10 minutes
+
+### Manual Cleanup
+
+```bash
+# Clean old activity logs (e.g., older than 90 days)
+# This should be run as a scheduled job
+```
+
+### Health Check
+
+```bash
+curl http://localhost:3000/health
+```
+
+Response includes database connection status.
+
+## Testing
+
+### Manual Testing
+
+Use the provided examples:
+
+**Create User:**
+```bash
+curl -X POST http://localhost:3000/api/v1/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "privyId": "privy_user123",
+    "email": "user@example.com"
+  }'
+```
+
+**Create Session:**
+```bash
+curl -X POST http://localhost:3000/api/v1/sessions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user-uuid-here",
+    "deviceId": "device123",
+    "platform": "ios",
+    "idempotencyKey": "request-uuid-here"
+  }'
+```
+
+## Error Handling
+
+### Optimistic Lock Conflicts
+
+When a user update fails due to concurrent modification:
+
+```json
+{
+  "success": false,
+  "error": "Failed to update user",
+  "message": "User has been modified by another request. Please retry."
+}
+```
+
+**Status Code:** 409 Conflict
+
+### Duplicate Resource Creation
+
+When attempting to create a duplicate resource:
+
+```json
+{
+  "success": false,
+  "error": "User with this Privy ID already exists"
+}
+```
+
+**Status Code:** 400 Bad Request
 
 ## Development
 
-The project uses TypeScript with strict type checking. All source files are in the `src/` directory and will be compiled to the `dist/` directory.
-
-### Type Safety
-
-- Strict TypeScript configuration
-- Type definitions in `src/types/`
-- Interface definitions for API responses
-- Proper error handling with typed responses
-
-### Architecture
-
-- **Routes**: Handle HTTP requests and responses
-- **Services**: Contain business logic and data processing
-- **Config**: Database and external service configurations
-- **Types**: Centralized TypeScript type definitions
-- **Middleware**: Security, logging, and error handling
-
-## Supabase Setup
-
-### 1. Create Supabase Project
-1. Go to [supabase.com](https://supabase.com)
-2. Create a new project
-3. Get your project URL and anon key from Settings > API
-
-### 2. Create Database Tables
-Run this SQL in your Supabase SQL editor:
-
-```sql
--- Create users table with unique constraint on (email, user_address)
-CREATE TABLE users (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  email VARCHAR(255) NOT NULL,
-  user_address VARCHAR(255) NOT NULL,
-  userid VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create unique constraint on email and user_address combination
-CREATE UNIQUE INDEX users_email_address_unique ON users (email, user_address);
-
--- Create indexes for better query performance
-CREATE INDEX idx_users_email ON users (email);
-CREATE INDEX idx_users_user_address ON users (user_address);
-CREATE INDEX idx_users_created_at ON users (created_at);
-
--- Create devices table
-CREATE TABLE devices (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  userid VARCHAR(255) NOT NULL,
-  pushtoken VARCHAR(500) NOT NULL,
-  installation_time VARCHAR(255) NOT NULL,
-  device_id VARCHAR(255) UNIQUE NOT NULL,
-  platform VARCHAR(10) NOT NULL CHECK (platform IN ('ios', 'android')),
-  status INTEGER NOT NULL CHECK (status IN (0, 1)),
-  deviceinfo JSONB NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create indexes for devices table
-CREATE INDEX idx_devices_userid ON devices (userid);
-CREATE INDEX idx_devices_device_id ON devices (device_id);
-CREATE INDEX idx_devices_platform ON devices (platform);
-CREATE INDEX idx_devices_status ON devices (status);
-CREATE INDEX idx_devices_created_at ON devices (created_at);
-
--- Create private_beta_users table
-CREATE TABLE private_beta_users (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  referral_key VARCHAR(6) UNIQUE NOT NULL,
-  status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'active')),
-  user_email VARCHAR(255),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create updated_at trigger function
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- Create triggers
-CREATE TRIGGER update_users_updated_at 
-  BEFORE UPDATE ON users 
-  FOR EACH ROW 
-  EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_private_beta_users_updated_at 
-  BEFORE UPDATE ON private_beta_users 
-  FOR EACH ROW 
-  EXECUTE FUNCTION update_updated_at_column();
-```
-
-### 3. Test Database Connection
-```bash
-curl "http://localhost:3000/api/users/health/database"
-curl "http://localhost:3000/api/private-beta/health"
-```
-
-## Private Beta Referral System
-
-### Overview
-The private beta referral system allows you to create unique 6-digit numeric referral codes that users can use to gain access to your private beta. Each code is guaranteed to be unique and can only be used once.
-
-### Key Features
-- **Unique 6-digit numeric codes** (0-9)
-- **One-time use** - each code can only be used once
-- **Email tracking** - tracks which email used each code
-- **Status management** - pending/active status tracking
-- **Collision-resistant** - 1 million possible combinations
-
-### API Usage Examples
-
-#### 1. Create a New Referral Key
-```bash
-curl -X POST "http://localhost:3000/api/private-beta/referral" \
-  -H "Content-Type: application/json"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "referral_key": "123456",
-    "status": "pending",
-    "created_at": "2024-01-01T00:00:00.000Z"
-  },
-  "message": "Referral key created successfully"
-}
-```
-
-#### 2. Verify Referral Key (User Registration)
-```bash
-curl -X POST "http://localhost:3000/api/private-beta/verify" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "referral_key": "123456",
-    "user_email": "user@example.com"
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "referral_key": "123456",
-    "status": "active",
-    "user_email": "user@example.com",
-    "updated_at": "2024-01-01T00:00:00.000Z"
-  },
-  "message": "Referral key verified and user activated successfully"
-}
-```
-
-#### 3. Check User Status
-```bash
-curl -X POST "http://localhost:3000/api/private-beta/status" \
-  -H "Content-Type: application/json" \
-  -d '{"user_email": "user@example.com"}'
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "referral_key": "123456",
-    "status": "active",
-    "user_email": "user@example.com",
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:00:00.000Z"
-  },
-  "message": "User status retrieved successfully"
-}
-```
-
-#### 4. Get All Private Beta Users (Admin)
-```bash
-curl "http://localhost:3000/api/private-beta/users"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "123e4567-e89b-12d3-a456-426614174000",
-      "referral_key": "123456",
-      "status": "active",
-      "user_email": "user@example.com",
-      "created_at": "2024-01-01T00:00:00.000Z",
-      "updated_at": "2024-01-01T00:00:00.000Z"
-    }
-  ],
-  "count": 1
-}
-```
-
-### Error Handling
-
-#### Invalid Referral Key
-```json
-{
-  "success": false,
-  "error": "Verification failed",
-  "message": "Invalid or already used referral key"
-}
-```
-
-#### Email Already Registered
-```json
-{
-  "success": false,
-  "error": "Verification failed",
-  "message": "Email already registered"
-}
-```
-
-#### User Not Found
-```json
-{
-  "success": false,
-  "error": "User not found",
-  "message": "User not found"
-}
-```
-
-### Integration Flow
-
-1. **Admin creates referral keys** using the `/referral` endpoint
-2. **Share the `referral_key`** with potential beta users
-3. **Users verify their access** using the `/verify` endpoint with their email
-4. **Check user status** using the `/status` endpoint
-5. **Monitor all users** using the `/users` endpoint
-
-### Key Characteristics
-- **Referral codes are 6 digits long**
-- **Only numbers (0-9)**
-- **Each code is unique across the entire system**
-- **Codes can only be used once**
-- **Email addresses are tracked for each used code**
-- **Status changes from 'pending' to 'active' when used**
-
-## User Management System
-
-### Overview
-The user management system provides full CRUD operations for users with a unique constraint on the combination of email and user_address. This ensures that no two users can have the same email AND address combination.
-
-### Key Features
-- **Unique constraint** on (email, user_address) combination
-- **Full CRUD operations** - Create, Read, Update, Delete
-- **Email validation** with regex pattern matching
-- **Address validation** ensuring string type
-- **Automatic timestamps** for created_at and updated_at
-- **Comprehensive error handling** with detailed messages
-
-### API Usage Examples
-
-#### 1. Create a New User
-```bash
-curl -X POST "http://localhost:3000/api/users" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "john.doe@example.com",
-    "user_address": "0x1234567890abcdef1234567890abcdef12345678",
-    "userid": "john_doe_123"
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "email": "john.doe@example.com",
-    "user_address": "0x1234567890abcdef1234567890abcdef12345678",
-    "userid": "john_doe_123",
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:00:00.000Z"
-  },
-  "message": "User created successfully",
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-#### 2. Get All Users
-```bash
-curl "http://localhost:3000/api/users"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "123e4567-e89b-12d3-a456-426614174000",
-      "email": "john.doe@example.com",
-      "user_address": "0x1234567890abcdef1234567890abcdef12345678",
-      "userid": "john_doe_123",
-      "created_at": "2024-01-01T00:00:00.000Z",
-      "updated_at": "2024-01-01T00:00:00.000Z"
-    }
-  ],
-  "count": 1,
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-#### 3. Get User by ID
-```bash
-curl "http://localhost:3000/api/users/123e4567-e89b-12d3-a456-426614174000"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "email": "john.doe@example.com",
-    "user_address": "0x1234567890abcdef1234567890abcdef12345678",
-    "userid": "john_doe_123",
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:00:00.000Z"
-  },
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-#### 4. Get User by Email and Address
-```bash
-curl "http://localhost:3000/api/users/by-email-address?email=john.doe@example.com&user_address=0x1234567890abcdef1234567890abcdef12345678"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "email": "john.doe@example.com",
-    "user_address": "0x1234567890abcdef1234567890abcdef12345678",
-    "userid": "john_doe_123",
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:00:00.000Z"
-  },
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-#### 5. Update User
-```bash
-curl -X PUT "http://localhost:3000/api/users/123e4567-e89b-12d3-a456-426614174000" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userid": "john_smith_456",
-    "email": "john.smith@example.com"
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "email": "john.smith@example.com",
-    "user_address": "0x1234567890abcdef1234567890abcdef12345678",
-    "userid": "john_smith_456",
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:01:00.000Z"
-  },
-  "message": "User updated successfully",
-  "timestamp": "2024-01-01T00:01:00.000Z"
-}
-```
-
-#### 6. Delete User
-```bash
-curl -X DELETE "http://localhost:3000/api/users/123e4567-e89b-12d3-a456-426614174000"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "User deleted successfully",
-  "timestamp": "2024-01-01T00:02:00.000Z"
-}
-```
-
-#### 7. Database Health Check
-```bash
-curl "http://localhost:3000/api/users/health/database"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "database": "Supabase",
-    "connected": true,
-    "timestamp": "2024-01-01T00:00:00.000Z"
-  }
-}
-```
-
-### Error Handling Examples
-
-#### Duplicate Email and Address Combination
-```bash
-curl -X POST "http://localhost:3000/api/users" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "john.doe@example.com",
-    "user_address": "0x1234567890abcdef1234567890abcdef12345678",
-    "userid": "jane_doe_789"
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": false,
-  "error": "Failed to create user",
-  "message": "User with this email and address combination already exists"
-}
-```
-
-#### Invalid Email Format
-```bash
-curl -X POST "http://localhost:3000/api/users" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "invalid-email",
-    "user_address": "0x1234567890abcdef1234567890abcdef12345678",
-    "userid": "john_doe_123"
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": false,
-  "error": "Invalid email format",
-  "message": "Please provide a valid email address"
-}
-```
-
-#### Missing Required Fields
-```bash
-curl -X POST "http://localhost:3000/api/users" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "john.doe@example.com",
-    "userid": "john_doe_123"
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": false,
-  "error": "Invalid user address",
-  "message": "User address is required and must be a string"
-}
-```
-
-### User Schema
-- **id**: UUID (auto-generated primary key)
-- **email**: String (required, validated with regex)
-- **user_address**: String (required)
-- **userid**: String (required)
-- **created_at**: Timestamp (auto-generated)
-- **updated_at**: Timestamp (auto-updated)
-
-### Unique Constraint
-The combination of `email` and `user_address` must be unique across all users. This means:
-- ✅ Same email with different addresses is allowed
-- ✅ Same address with different emails is allowed  
-- ❌ Same email AND same address combination is not allowed
-
-## Device Management System
-
-### Overview
-The device management system provides full CRUD operations for devices associated with users. Each device has a unique device_id and stores push notification tokens, installation information, and device details.
-
-### Key Features
-- **Unique device_id** constraint ensuring no duplicate devices
-- **User validation** - device can only be created if userid exists in users table
-- **Status management** - when device is created/updated with status 1, all other devices for that user are set to status 0
-- **Full CRUD operations** - Create, Read, Update, Delete
-- **Status management** with binary values (1 = active, 0 = inactive)
-- **Device information** stored as flexible JSON object
-- **User association** via userid field
-- **Push token management** for notifications
-- **Comprehensive error handling** with detailed messages
-
-### API Usage Examples
-
-#### 1. Create a New Device
-```bash
-curl -X POST "http://localhost:3000/api/devices" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": {
-      "version": "17.2",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "osVersion": "17.2.1",
-      "appVersion": "1.0.0",
-      "batteryLevel": 85,
-      "isConnected": true
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "456e7890-e89b-12d3-a456-426614174001",
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": {
-      "version": "17.2",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "osVersion": "17.2.1",
-      "appVersion": "1.0.0",
-      "batteryLevel": 85,
-      "isConnected": true
-    },
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:00:00.000Z"
-  },
-  "message": "Device created successfully",
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-#### 2. Get All Devices
-```bash
-curl "http://localhost:3000/api/devices"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "456e7890-e89b-12d3-a456-426614174001",
-      "userid": "john_doe_123",
-      "pushtoken": "fcm_token_example_123456789",
-      "installation_time": "2024-01-01T00:00:00.000Z",
-      "device_id": "device_12345",
-      "status": 1,
-      "deviceInfo": {
-        "platform": "iOS",
-        "version": "17.2",
-        "model": "iPhone 15 Pro",
-        "manufacturer": "Apple",
-        "os": "iOS",
-        "osVersion": "17.2.1",
-        "appVersion": "1.0.0"
-      },
-      "created_at": "2024-01-01T00:00:00.000Z",
-      "updated_at": "2024-01-01T00:00:00.000Z"
-    }
-  ],
-  "count": 1,
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-#### 3. Get Device by ID
-```bash
-curl "http://localhost:3000/api/devices/456e7890-e89b-12d3-a456-426614174001"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "456e7890-e89b-12d3-a456-426614174001",
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": {
-      "version": "17.2",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "osVersion": "17.2.1",
-      "appVersion": "1.0.0",
-      "batteryLevel": 85,
-      "isConnected": true
-    },
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:00:00.000Z"
-  },
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-#### 4. Get Devices by User ID
-```bash
-curl "http://localhost:3000/api/devices/user/john_doe_123"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "456e7890-e89b-12d3-a456-426614174001",
-      "userid": "john_doe_123",
-      "pushtoken": "fcm_token_example_123456789",
-      "installation_time": "2024-01-01T00:00:00.000Z",
-      "device_id": "device_12345",
-      "status": 1,
-      "deviceInfo": {
-        "platform": "iOS",
-        "version": "17.2",
-        "model": "iPhone 15 Pro",
-        "manufacturer": "Apple",
-        "os": "iOS",
-        "osVersion": "17.2.1",
-        "appVersion": "1.0.0"
-      },
-      "created_at": "2024-01-01T00:00:00.000Z",
-      "updated_at": "2024-01-01T00:00:00.000Z"
-    }
-  ],
-  "count": 1,
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-#### 5. Get Device by Device ID
-```bash
-curl "http://localhost:3000/api/devices/by-device-id/device_12345"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "456e7890-e89b-12d3-a456-426614174001",
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": {
-      "version": "17.2",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "osVersion": "17.2.1",
-      "appVersion": "1.0.0",
-      "batteryLevel": 85,
-      "isConnected": true
-    },
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:00:00.000Z"
-  },
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-#### 5. Find Device by Multiple Parameters
-```bash
-curl "http://localhost:3000/api/devices/find?device_id=device_12345&userid=john_doe_123&installation_time=2024-01-01T00:00:00.000Z"
-```
-
-**Response (Device Found):**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": {
-      "version": "17.2",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "osVersion": "17.2.1",
-      "appVersion": "1.0.0",
-      "batteryLevel": 85,
-      "isConnected": true
-    },
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:00:00.000Z"
-  },
-  "message": "Device found",
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-**Response (Device Not Found):**
-```json
-{
-  "success": true,
-  "data": false,
-  "message": "Device not found",
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-#### 7. Update Device by Parameters
-```bash
-curl -X PUT "http://localhost:3000/api/devices/update-by-params?device_id=device_12345&userid=john_doe_123&installation_time=2024-01-01T00:00:00.000Z" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "status": 1,
-    "pushtoken": "new_fcm_token_987654321",
-    "deviceinfo": {
-      "version": "17.3",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "osVersion": "17.3.1",
-      "appVersion": "1.1.0",
-      "batteryLevel": 90,
-      "isConnected": true
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "userid": "john_doe_123",
-    "pushtoken": "new_fcm_token_987654321",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": {
-      "version": "17.3",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "osVersion": "17.3.1",
-      "appVersion": "1.1.0",
-      "batteryLevel": 90,
-      "isConnected": true
-    },
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T12:00:00.000Z"
-  },
-  "message": "Device updated successfully",
-  "timestamp": "2024-01-01T12:00:00.000Z"
-}
-```
-
-**Note:** When updating status to 1, all other devices for the same user are automatically set to status 0.
-
-#### 8. Upsert Device (Update if exists, Create if not exists)
-```bash
-curl -X POST "http://localhost:3000/api/devices/upsert" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": {
-      "version": "17.2",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "osVersion": "17.2.1",
-      "appVersion": "1.0.0",
-      "batteryLevel": 85,
-      "isConnected": true
-    }
-  }'
-```
-
-**Response (Device Updated):**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": {
-      "version": "17.2",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "osVersion": "17.2.1",
-      "appVersion": "1.0.0",
-      "batteryLevel": 85,
-      "isConnected": true
-    },
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T12:00:00.000Z"
-  },
-  "message": "Device upserted successfully",
-  "timestamp": "2024-01-01T12:00:00.000Z"
-}
-```
-
-**Response (Device Created):**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440001",
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": {
-      "version": "17.2",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "osVersion": "17.2.1",
-      "appVersion": "1.0.0",
-      "batteryLevel": 85,
-      "isConnected": true
-    },
-    "created_at": "2024-01-01T12:00:00.000Z",
-    "updated_at": "2024-01-01T12:00:00.000Z"
-  },
-  "message": "Device upserted successfully",
-  "timestamp": "2024-01-01T12:00:00.000Z"
-}
-```
-
-**Note:** 
-- If device exists (same device_id, userid, installation_time), it will be updated
-- If device doesn't exist, it will be created
-- When status is 1, all other devices for the same user are automatically set to status 0
-
-#### 9. Update Device
-```bash
-curl -X PUT "http://localhost:3000/api/devices/456e7890-e89b-12d3-a456-426614174001" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "pushtoken": "new_fcm_token_987654321",
-    "deviceInfo": {
-      "platform": "iOS",
-      "version": "17.3",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "os": "iOS",
-      "osVersion": "17.3.0",
-      "appVersion": "1.1.0"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "456e7890-e89b-12d3-a456-426614174001",
-    "userid": "john_doe_123",
-    "pushtoken": "new_fcm_token_987654321",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceInfo": {
-      "platform": "iOS",
-      "version": "17.3",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "os": "iOS",
-      "osVersion": "17.3.0",
-      "appVersion": "1.1.0"
-    },
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:01:00.000Z"
-  },
-  "message": "Device updated successfully",
-  "timestamp": "2024-01-01T00:01:00.000Z"
-}
-```
-
-#### 10. Update Device Status
-```bash
-curl -X PATCH "http://localhost:3000/api/devices/456e7890-e89b-12d3-a456-426614174001/status" \
-  -H "Content-Type: application/json" \
-  -d '{"status": 0}'
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "456e7890-e89b-12d3-a456-426614174001",
-    "userid": "john_doe_123",
-    "pushtoken": "new_fcm_token_987654321",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "status": 0,
-    "deviceInfo": {
-      "platform": "iOS",
-      "version": "17.3",
-      "model": "iPhone 15 Pro",
-      "manufacturer": "Apple",
-      "os": "iOS",
-      "osVersion": "17.3.0",
-      "appVersion": "1.1.0"
-    },
-    "created_at": "2024-01-01T00:00:00.000Z",
-    "updated_at": "2024-01-01T00:02:00.000Z"
-  },
-  "message": "Device status updated successfully",
-  "timestamp": "2024-01-01T00:02:00.000Z"
-}
-```
-
-#### 11. Delete Device
-```bash
-curl -X DELETE "http://localhost:3000/api/devices/456e7890-e89b-12d3-a456-426614174001"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Device deleted successfully",
-  "timestamp": "2024-01-01T00:03:00.000Z"
-}
-```
-
-#### 12. Database Health Check
-```bash
-curl "http://localhost:3000/api/devices/health/database"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "database": "Supabase",
-    "connected": true,
-    "timestamp": "2024-01-01T00:00:00.000Z"
-  }
-}
-```
-
-### Error Handling Examples
-
-#### Duplicate Device ID
-```bash
-curl -X POST "http://localhost:3000/api/devices" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userid": "jane_doe_789",
-    "pushtoken": "fcm_token_example_999999999",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_12345",
-    "platform": "ios",
-    "status": 1,
-    "deviceInfo": {
-      "platform": "Android",
-      "version": "14",
-      "model": "Pixel 8"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": false,
-  "error": "Failed to create device",
-  "message": "Device with this device_id already exists"
-}
-```
-
-#### Invalid Status Value
-```bash
-curl -X POST "http://localhost:3000/api/devices" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_67890",
-    "status": 2,
-    "deviceInfo": {
-      "platform": "iOS"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": false,
-  "error": "Invalid status",
-  "message": "Status must be either 1 or 0"
-}
-```
-
-#### User Not Found
-```bash
-curl -X POST "http://localhost:3000/api/devices" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userid": "non_existent_user",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_67890",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": {
-      "version": "17.2"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": false,
-  "error": "Failed to create device",
-  "message": "User not found"
-}
-```
-
-#### Invalid Platform Value
-```bash
-curl -X POST "http://localhost:3000/api/devices" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_67890",
-    "platform": "windows",
-    "status": 1,
-    "deviceInfo": {
-      "platform": "iOS"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": false,
-  "error": "Invalid platform",
-  "message": "Platform is required and must be either \"ios\" or \"android\""
-}
-```
-
-#### Invalid Deviceinfo Type
-```bash
-curl -X POST "http://localhost:3000/api/devices" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userid": "john_doe_123",
-    "pushtoken": "fcm_token_example_123456789",
-    "installation_time": "2024-01-01T00:00:00.000Z",
-    "device_id": "device_67890",
-    "platform": "ios",
-    "status": 1,
-    "deviceinfo": "this should be an object, not a string"
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": false,
-  "error": "Invalid deviceinfo",
-  "message": "Deviceinfo is required and must be an object (not array or primitive)"
-}
-```
-
-### Device Schema
-- **id**: UUID (auto-generated primary key)
-- **userid**: String (required, references user)
-- **pushtoken**: String (required, for push notifications)
-- **installation_time**: String (required, ISO timestamp)
-- **device_id**: String (required, unique identifier)
-- **platform**: String (required, must be "ios" or "android")
-- **status**: Integer (required, 1 = active, 0 = inactive)
-- **deviceinfo**: JSON Object (required, flexible device information)
-- **created_at**: Timestamp (auto-generated)
-- **updated_at**: Timestamp (auto-updated)
-
-### Device Info Object Structure
-The `deviceinfo` field is a completely flexible JSON object that can contain ANY properties and values. It must be an object (not array or primitive), but the structure is entirely up to you:
-
-**Example 1 - iOS Device:**
-```json
-{
-  "version": "17.2",
-  "model": "iPhone 15 Pro",
-  "manufacturer": "Apple",
-  "osVersion": "17.2.1",
-  "appVersion": "1.0.0",
-  "batteryLevel": 85,
-  "isConnected": true
-}
-```
-
-**Example 2 - Android Device:**
-```json
-{
-  "version": "14",
-  "model": "Pixel 8",
-  "manufacturer": "Google",
-  "osVersion": "14.0",
-  "appVersion": "1.0.0",
-  "batteryLevel": 92,
-  "isConnected": true,
-  "androidId": "abc123def456"
-}
-```
-
-**Example 3 - Web Browser:**
-```json
-{
-  "browser": "Chrome",
-  "browserVersion": "120.0.6099.109",
-  "userAgent": "Mozilla/5.0...",
-  "screenResolution": "1920x1080",
-  "timezone": "UTC-5"
-}
-```
-
-**Example 4 - Custom Structure:**
-```json
-{
-  "deviceType": "smartphone",
-  "brand": "Samsung",
-  "customField1": "any value",
-  "customField2": 123,
-  "customField3": true,
-  "nestedObject": {
-    "subProperty": "value"
-  }
-}
-```
-
-**Example 5 - Minimal Object:**
-```json
-{
-  "name": "My Device"
-}
-```
-
-**Example 6 - Empty Object:**
-```json
-{}
-```
-
-### Unique Constraints
-- **device_id** must be unique across all devices
-- Multiple devices can belong to the same user (same userid)
-- Each device can only have one active record
-
-### Status Management Rules
-- **Only one device per user can have status 1 (active)**
-- When creating a device with status 1, all other devices for that user are automatically set to status 0
-- When updating a device to status 1, all other devices for that user are automatically set to status 0
-- When updating device status to 1 via PATCH endpoint, all other devices for that user are automatically set to status 0
-- Multiple devices can have status 0 (inactive) for the same user
-
-### User Validation Rules
-- **Device can only be created if userid exists in users table**
-- The userid field must reference a valid user from the users collection
-- If userid doesn't exist, device creation will fail with "User not found" error
-
-# zeroLight-backend
+### Project Structure
+
+```
+src/
+├── config/
+│   └── prisma.ts           # Database connection & pooling
+├── services/
+│   ├── lockService.ts      # Distributed locking
+│   ├── userService.ts      # User operations
+│   ├── sessionService.ts   # Session management
+│   ├── notificationService.ts
+│   ├── activityLogService.ts
+│   └── privateBetaService.ts
+├── routes/
+│   ├── v1/
+│   │   ├── userRoutes.ts
+│   │   ├── sessionRoutes.ts
+│   │   └── notificationRoutes.ts
+│   └── privateBetaRoutes.ts
+├── types/
+│   └── index.ts            # TypeScript definitions
+└── app.ts                  # Express app setup
+
+prisma/
+├── schema.prisma           # Prisma schema
+└── migrations/
+    └── 001_initial_schema.sql
+```
+
+### Code Style
+
+The project uses TypeScript with strict type checking and follows:
+- ESLint for linting
+- Prettier for formatting
+- Async/await for asynchronous operations
+- Proper error handling with try/catch
+
+## Production Deployment
+
+### Checklist
+
+- [ ] Set `NODE_ENV=production`
+- [ ] Configure DATABASE_URL with production credentials
+- [ ] Set up database backups
+- [ ] Configure connection pooling appropriately
+- [ ] Set up monitoring and alerting
+- [ ] Configure log aggregation
+- [ ] Set up SSL/TLS for database connections
+- [ ] Review and adjust session expiration times
+- [ ] Set up automated partition creation for activity_logs
+- [ ] Configure CORS appropriately
+- [ ] Set up rate limiting (not included, should be added)
+
+### Scaling Considerations
+
+For horizontal scaling:
+- Use a managed PostgreSQL service (e.g., AWS RDS, Google Cloud SQL)
+- Implement Redis for session storage (optional enhancement)
+- Add load balancer in front of API servers
+- Monitor database connection pool usage
+- Consider read replicas for read-heavy workloads
+
+## Security Notes
+
+⚠️ **Important:** The current implementation is designed for demonstration. For production:
+
+1. Add authentication middleware (JWT, OAuth, etc.)
+2. Implement rate limiting
+3. Add request validation with schema validators
+4. Use HTTPS only
+5. Implement CORS restrictions
+6. Add API key authentication for admin endpoints
+7. Sanitize user inputs
+8. Add audit logging
+9. Implement IP whitelisting for admin routes
+10. Add request signing for sensitive operations
+
+## License
+
+ISC
+
+## Support
+
+For issues and questions, please open an issue on the repository.

@@ -6,11 +6,11 @@
 export interface EnvironmentVariables {
   NODE_ENV: 'development' | 'production' | 'test';
   PORT: string;
-  DATABASE_URL?: string;
+  DATABASE_URL: string;
+  DATABASE_CONNECTION_LIMIT?: string;
+  DATABASE_CONNECTION_TIMEOUT?: string;
   JWT_SECRET?: string;
   API_KEY?: string;
-  SUPABASE_URL: string;
-  SUPABASE_ANON_KEY: string;
 }
 
 // Express Request extension for custom properties
@@ -19,8 +19,13 @@ declare global {
     interface Request {
       user?: {
         id: string;
-        email: string;
-        role: string;
+        privyId: string;
+        email?: string;
+        role?: string;
+      };
+      session?: {
+        id: string;
+        userId: string;
       };
     }
   }
@@ -29,7 +34,7 @@ declare global {
 // API Response types
 export interface BaseResponse {
   success: boolean;
-  timestamp: string;
+  timestamp?: string;
 }
 
 export interface SuccessResponse<T = any> extends BaseResponse {
@@ -46,44 +51,161 @@ export interface ErrorResponse extends BaseResponse {
 
 export type ApiResponse<T = any> = SuccessResponse<T> | ErrorResponse;
 
-// Route parameter types
-export interface HelloParams {
-  name: string;
-}
-
-// Service method return types
-export type ServiceMethod<T> = () => Promise<T>;
-export type ServiceMethodWithParams<T, P> = (params: P) => Promise<T>;
-
-// Database types
+// Database response types
 export interface DatabaseResponse<T = any> {
   data: T | null;
   error: string | null;
   success: boolean;
 }
 
+// User types
 export interface User {
   id: string;
-  email: string;
-  user_address: string;
-  userid: string;
-  created_at: string;
-  updated_at: string;
+  privyId: string;
+  email: string | null;
+  phone: string | null;
+  walletAddress: string | null;
+  walletRegisteredAt: Date | null;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  lastActiveAt: Date | null;
+  version: number;
 }
 
 export interface CreateUserData {
-  email: string;
-  user_address: string;
-  userid: string;
+  privyId: string;
+  email?: string;
+  phone?: string;
+  walletAddress?: string;
 }
 
 export interface UpdateUserData {
   email?: string;
-  user_address?: string;
-  userid?: string;
+  phone?: string;
+  walletAddress?: string;
+  status?: string;
+  lastActiveAt?: Date;
 }
 
-// Device types
+// Session types
+export interface Session {
+  id: string;
+  userId: string;
+  deviceId: string;
+  deviceName: string | null;
+  deviceModel: string | null;
+  platform: string;
+  osVersion: string | null;
+  appVersion: string | null;
+  pushToken: string | null;
+  pushTokenUpdatedAt: Date | null;
+  isActive: boolean;
+  ipAddress: string | null;
+  idempotencyKey: string | null;
+  createdAt: Date;
+  lastActivityAt: Date;
+  expiresAt: Date;
+  terminatedAt: Date | null;
+  terminationReason: string | null;
+}
+
+export interface CreateSessionData {
+  userId: string;
+  deviceId: string;
+  deviceName?: string | null;
+  deviceModel?: string | null;
+  platform: 'ios' | 'android';
+  osVersion?: string | null;
+  appVersion?: string | null;
+  pushToken?: string | null;
+  ipAddress?: string | null;
+  idempotencyKey?: string | null;
+  expiresInDays?: number;
+}
+
+export interface UpdateSessionData {
+  deviceName?: string;
+  deviceModel?: string;
+  osVersion?: string;
+  appVersion?: string;
+  pushToken?: string;
+  ipAddress?: string;
+}
+
+// Notification Preferences types
+export interface NotificationPreferences {
+  userId: string;
+  tradeExecutedEnabled: boolean;
+  orderFilledEnabled: boolean;
+  orderCancelledEnabled: boolean;
+  positionLiquidatedEnabled: boolean;
+  fundingPaymentEnabled: boolean;
+  priceAlertEnabled: boolean;
+  marginWarningEnabled: boolean;
+  pushEnabled: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStart: Date | null;
+  quietHoursEnd: Date | null;
+  quietHoursTimezone: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UpdateNotificationPreferencesData {
+  tradeExecutedEnabled?: boolean;
+  orderFilledEnabled?: boolean;
+  orderCancelledEnabled?: boolean;
+  positionLiquidatedEnabled?: boolean;
+  fundingPaymentEnabled?: boolean;
+  priceAlertEnabled?: boolean;
+  marginWarningEnabled?: boolean;
+  pushEnabled?: boolean;
+  quietHoursEnabled?: boolean;
+  quietHoursStart?: Date;
+  quietHoursEnd?: Date;
+  quietHoursTimezone?: string;
+}
+
+// Activity Log types
+export interface ActivityLog {
+  id: string;
+  userId: string;
+  sessionId: string | null;
+  action: string;
+  metadata: any;
+  ipAddress: string | null;
+  createdAt: Date;
+}
+
+export interface CreateActivityLogData {
+  userId: string;
+  sessionId?: string | null;
+  action: string;
+  metadata?: Record<string, any>;
+  ipAddress?: string | null;
+}
+
+// Private Beta Users types (keeping for backward compatibility)
+export interface PrivateBetaUser {
+  id: string;
+  referralKey: string;
+  status: 'pending' | 'active';
+  userEmail?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VerifyReferralData {
+  referral_key: string;
+  user_email: string;
+}
+
+export interface CheckUserStatusData {
+  user_email: string;
+}
+
+// Device types (legacy - keeping for backward compatibility)
 export interface Device {
   id: string;
   userid: string;
@@ -117,23 +239,18 @@ export interface UpdateDeviceData {
   deviceinfo?: Record<string, any>;
 }
 
-// Private Beta Users types
-export interface PrivateBetaUser {
-  id: string;
-  referral_key: string;
-  status: 'pending' | 'active';
-  user_email?: string;
-  created_at: string;
-  updated_at: string;
+// Pagination types
+export interface PaginationParams {
+  page?: number;
+  limit?: number;
 }
 
-export interface VerifyReferralData {
-  referral_key: string;
-  user_email: string;
-}
-
-export interface CheckUserStatusData {
-  user_email: string;
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  totalPages: number;
+  timestamp?: string;
 }
 
 // Middleware types
@@ -149,3 +266,11 @@ export type ErrorMiddleware = (
   res: import('express').Response,
   next: import('express').NextFunction
 ) => void;
+
+// Lock types
+export interface DistributedLock {
+  lockKey: string;
+  lockOwner: string;
+  lockedAt: Date;
+  expiresAt: Date;
+}

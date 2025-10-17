@@ -67,3 +67,5 @@ build/
 
 # TypeScript cache
 .tscache/
+
+/src/generated/prisma
