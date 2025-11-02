@@ -17,12 +17,16 @@ export interface CreateUserInput {
   privyId: string;
   email?: string;
   phone?: string;
+  displayName?: string;
+  profilePictureUrl?: string;
   walletAddress?: string;
 }
 
 export interface UpdateUserInput {
   email?: string;
   phone?: string;
+  displayName?: string;
+  profilePictureUrl?: string;
   walletAddress?: string;
   status?: string;
   lastActiveAt?: Date;
@@ -33,6 +37,8 @@ export interface UserWithSessions {
   privyId: string;
   email: string | null;
   phone: string | null;
+  displayName: string | null;
+  profilePictureUrl: string | null;
   walletAddress: string | null;
   walletRegisteredAt: Date | null;
   status: string;
@@ -231,6 +237,8 @@ export const createUser = async (
           privyId: input.privyId,
           email: input.email || null,
           phone: input.phone || null,
+          displayName: input.displayName || null,
+          profilePictureUrl: input.profilePictureUrl || null,
           walletAddress: input.walletAddress || null,
           walletRegisteredAt: input.walletAddress ? new Date() : null,
           status: 'active',

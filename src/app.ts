@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import userRoutesV1 from './routes/v1/userRoutes';
 import sessionRoutesV1 from './routes/v1/sessionRoutes';
 import notificationRoutesV1 from './routes/v1/notificationRoutes';
+import activityLogRoutesV1 from './routes/v1/activityLogRoutes';
 
 // Import legacy routes (keeping private-beta unchanged)
 import privateBetaRoutes from './routes/privateBetaRoutes';
@@ -32,6 +33,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/v1/users', userRoutesV1);
 app.use('/api/v1/sessions', sessionRoutesV1);
 app.use('/api/v1/notifications', notificationRoutesV1);
+app.use('/api/v1/activity-logs', activityLogRoutesV1);
 
 // Keep private-beta routes unchanged at /api/private-beta
 app.use('/api/private-beta', privateBetaRoutes);
@@ -39,7 +41,7 @@ app.use('/api/private-beta', privateBetaRoutes);
 // Health check route
 app.get('/health', async (_req: Request, res: Response) => {
   const dbConnected = await checkDatabaseConnection();
-  
+
   res.status(dbConnected ? 200 : 503).json({
     status: dbConnected ? 'OK' : 'Unhealthy',
     message: 'Server is running',
@@ -75,9 +77,10 @@ app.listen(PORT, async () => {
   console.log(`   Users: http://localhost:${PORT}/api/v1/users`);
   console.log(`   Sessions: http://localhost:${PORT}/api/v1/sessions`);
   console.log(`   Notifications: http://localhost:${PORT}/api/v1/notifications`);
+  console.log(`   Activity Logs: http://localhost:${PORT}/api/v1/activity-logs`);
   console.log('\n🔐 Private Beta API (unchanged):');
   console.log(`   Private Beta: http://localhost:${PORT}/api/private-beta`);
-  
+
   // Check database connection on startup
   const dbConnected = await checkDatabaseConnection();
   console.log(`\n💾 Database: ${dbConnected ? '✅ Connected' : '❌ Disconnected'}`);

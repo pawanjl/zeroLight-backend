@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import {
   getUserById,
   getUserByPrivyId,
@@ -11,8 +12,25 @@ import {
   deleteUser
 } from '../../services/userService';
 import { logActivity, ActivityActions } from '../../services/activityLogService';
+import { uploadProfilePicture } from '../../services/storageService';
 
 const router: Router = Router();
+
+// Configure multer for memory storage (we'll upload to Supabase)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'));
+    }
+  }
+});
 
 /**
  * @route   GET /api/v1/users
@@ -174,7 +192,7 @@ router.get('/wallet/:walletAddress', async (req: Request, res: Response): Promis
  */
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { privyId, email, phone, walletAddress } = req.body;
+    const { privyId, email, phone, displayName, profilePictureUrl, walletAddress } = req.body;
 
     // Validate required fields
     if (!privyId || typeof privyId !== 'string') {
@@ -203,6 +221,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       privyId,
       email,
       phone,
+      displayName,
+      profilePictureUrl,
       walletAddress
     });
 
@@ -224,6 +244,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           privyId,
           hasEmail: !!email,
           hasPhone: !!phone,
+          hasDisplayName: !!displayName,
+          hasProfilePicture: !!profilePictureUrl,
           hasWallet: !!walletAddress
         },
         ipAddress: req.ip
@@ -257,7 +279,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({ success: false, error: 'User ID required' });
       return;
     }
-    const { email, phone, walletAddress, status, version } = req.body;
+    const { email, phone, displayName, profilePictureUrl, walletAddress, status, version } = req.body;
 
     // Validate email format if provided
     if (email) {
@@ -277,6 +299,8 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
       {
         email,
         phone,
+        displayName,
+        profilePictureUrl,
         walletAddress,
         status
       },
@@ -449,6 +473,116 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * @route   POST /api/v1/users/:id/profile-picture
+ * @desc    Upload profile picture for user (accepts UUID or Privy ID)
+ * @access  Public
+ */
+router.post('/:id/profile-picture', upload.single('profilePicture'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params['id'];
+    if (!id) {
+      res.status(400).json({ success: false, error: 'User ID required' });
+      return;
+    }
+
+    // Check if file was uploaded
+    if (!req.file) {
+      res.status(400).json({
+        success: false,
+        error: 'No file uploaded',
+        message: 'Please upload a profile picture'
+      });
+      return;
+    }
+
+    // Verify user exists - handle both UUID and Privy ID
+    let userResult;
+    if (id.startsWith('did:privy:')) {
+      // It's a Privy ID
+      userResult = await getUserByPrivyId(id);
+    } else {
+      // It's a UUID
+      userResult = await getUserById(id);
+    }
+
+    if (!userResult.success || !userResult.data) {
+      res.status(404).json({
+        success: false,
+        error: 'User not found',
+        message: userResult.error
+      });
+      return;
+    }
+
+    // Use the actual UUID for storage
+    const userId = userResult.data.id;
+
+    // Upload to Supabase Storage
+    const uploadResult = await uploadProfilePicture(
+      userId,
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype
+    );
+
+    if (!uploadResult.success) {
+      res.status(400).json({
+        success: false,
+        error: 'Failed to upload profile picture',
+        message: uploadResult.error
+      });
+      return;
+    }
+
+    // Update user with new profile picture URL
+    const updateResult = await updateUser(userId, {
+      profilePictureUrl: uploadResult.data!.publicUrl
+    });
+
+    if (!updateResult.success) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to update user profile',
+        message: updateResult.error
+      });
+      return;
+    }
+
+    // Log activity
+    if (req.ip) {
+      await logActivity({
+        userId: userId,
+        action: ActivityActions.PROFILE_UPDATED,
+        metadata: {
+          action: 'profile_picture_uploaded',
+          fileSize: uploadResult.data!.size,
+          url: uploadResult.data!.publicUrl
+        },
+        ipAddress: req.ip
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        profilePictureUrl: uploadResult.data!.publicUrl,
+        path: uploadResult.data!.path,
+        size: uploadResult.data!.size
+      },
+      message: 'Profile picture uploaded successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Profile picture upload error:', error);
     res.status(500).json({
       success: false,
       error: 'Internal server error',
