@@ -5,7 +5,9 @@ import {
   checkUserStatus,
   getAllPrivateBetaUsers,
   isValidEmail,
-  checkReferralValidity
+  checkReferralValidity,
+  createMultipleReferralKeys,
+  getUnusedReferrals
 } from '../services/privateBetaService';
 import { VerifyReferralData, CheckUserStatusData } from '../types';
 
@@ -276,6 +278,85 @@ router.get('/debug', async (_req: Request, res: Response): Promise<void> => {
     res.status(500).json({
       success: false,
       error: 'Debug failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/private-beta/referrals/bulk - Create multiple referral keys at once
+router.post('/referrals/bulk', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { count } = req.body;
+
+    // Validate count parameter
+    if (!count || typeof count !== 'number') {
+      res.status(400).json({
+        success: false,
+        message: 'Count is required and must be a number'
+      });
+      return;
+    }
+
+    if (count <= 0 || count > 100) {
+      res.status(400).json({
+        success: false,
+        message: 'Count must be between 1 and 100'
+      });
+      return;
+    }
+
+    const result = await createMultipleReferralKeys(count);
+
+    if (!result.success) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to create referral keys',
+        message: result.error
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully created ${count} referral keys`,
+      data: result.data,
+      count: result.data?.length || 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/private-beta/referrals/unused - Get all unused (pending) referral keys
+router.get('/referrals/unused', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await getUnusedReferrals();
+
+    if (!result.success) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch unused referral keys',
+        message: result.error
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Successfully retrieved unused referral keys',
+      data: result.data,
+      count: result.data?.length || 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

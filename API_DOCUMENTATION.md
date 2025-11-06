@@ -1086,6 +1086,116 @@ curl -X GET http://localhost:3000/api/private-beta/users
 
 ---
 
+### Create Multiple Referral Keys (Bulk)
+
+Generate multiple referral keys at once.
+
+**Endpoint:** `POST /api/private-beta/referrals/bulk`
+
+**Request Body:**
+```json
+{
+  "count": "number (required, 1-100)"
+}
+```
+
+**Curl Example:**
+```bash
+curl -X POST http://localhost:3000/api/private-beta/referrals/bulk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "count": 10
+  }'
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Successfully created 10 referral keys",
+  "data": [
+    {
+      "id": "uuid",
+      "referralKey": "089304",
+      "status": "pending",
+      "userEmail": null,
+      "createdAt": "2025-10-16T22:01:07.825Z",
+      "updatedAt": "2025-10-16T22:01:07.825Z"
+    },
+    {
+      "id": "uuid",
+      "referralKey": "123456",
+      "status": "pending",
+      "userEmail": null,
+      "createdAt": "2025-10-16T22:01:07.825Z",
+      "updatedAt": "2025-10-16T22:01:07.825Z"
+    }
+  ],
+  "count": 10,
+  "timestamp": "2025-10-16T22:01:09.966Z"
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "success": false,
+  "message": "Count must be between 1 and 100"
+}
+```
+
+---
+
+### Get Unused Referral Keys
+
+Get all unused (pending) referral keys from the database.
+
+**Endpoint:** `GET /api/private-beta/referrals/unused`
+
+**Curl Example:**
+```bash
+curl -X GET http://localhost:3000/api/private-beta/referrals/unused
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Successfully retrieved unused referral keys",
+  "data": [
+    {
+      "id": "uuid",
+      "referralKey": "089304",
+      "status": "pending",
+      "userEmail": null,
+      "createdAt": "2025-10-16T22:01:07.825Z",
+      "updatedAt": "2025-10-16T22:01:07.825Z"
+    },
+    {
+      "id": "uuid",
+      "referralKey": "234567",
+      "status": "pending",
+      "userEmail": null,
+      "createdAt": "2025-10-16T22:01:08.825Z",
+      "updatedAt": "2025-10-16T22:01:08.825Z"
+    }
+  ],
+  "count": 2,
+  "timestamp": "2025-10-16T22:01:09.966Z"
+}
+```
+
+**Error Response (500):**
+```json
+{
+  "success": false,
+  "error": "Failed to fetch unused referral keys",
+  "message": "Database connection error"
+}
+```
+
+---
+
 ## Health Check
 
 ### Server Health

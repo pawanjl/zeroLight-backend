@@ -290,3 +290,89 @@ export const checkReferralValidity = async (referralKey: string): Promise<Databa
     };
   }
 };
+
+/**
+ * Create multiple referral keys at once
+ * @param {number} count - Number of referral keys to create
+ * @returns {Promise<DatabaseResponse<PrivateBetaUser[]>>} Created referrals
+ */
+export const createMultipleReferralKeys = async (count: number): Promise<DatabaseResponse<PrivateBetaUser[]>> => {
+  try {
+    if (count <= 0 || count > 100) {
+      return {
+        data: null,
+        error: 'Count must be between 1 and 100',
+        success: false
+      };
+    }
+
+    const referralKeys: string[] = [];
+
+    // Generate unique keys
+    for (let i = 0; i < count; i++) {
+      const key = await generateUniqueReferralKey();
+      referralKeys.push(key);
+    }
+
+    // Create all referrals in a single transaction
+    const createdReferrals = await prisma.$transaction(
+      referralKeys.map(key =>
+        prisma.privateBetaUser.create({
+          data: {
+            referralKey: key,
+            status: 'pending'
+          }
+        })
+      )
+    );
+
+    return {
+      data: createdReferrals.map(r => ({
+        ...r,
+        createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString()
+      })) as PrivateBetaUser[],
+      error: null,
+      success: true
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      success: false
+    };
+  }
+};
+
+/**
+ * Get all unused (pending) referral keys
+ * @returns {Promise<DatabaseResponse<PrivateBetaUser[]>>} Unused referrals
+ */
+export const getUnusedReferrals = async (): Promise<DatabaseResponse<PrivateBetaUser[]>> => {
+  try {
+    const unusedReferrals = await prisma.privateBetaUser.findMany({
+      where: {
+        status: 'pending'
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    return {
+      data: unusedReferrals.map(r => ({
+        ...r,
+        createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString()
+      })) as PrivateBetaUser[],
+      error: null,
+      success: true
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      success: false
+    };
+  }
+};
