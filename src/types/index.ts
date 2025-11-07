@@ -9,20 +9,28 @@ export interface EnvironmentVariables {
   DATABASE_URL: string;
   DATABASE_CONNECTION_LIMIT?: string;
   DATABASE_CONNECTION_TIMEOUT?: string;
+  
+  // Authentication
   JWT_SECRET?: string;
+  JWT_REFRESH_SECRET?: string;
+  JWT_EXPIRES_IN?: string;
+  JWT_REFRESH_EXPIRES_IN?: string;
+  
+  // Privy Configuration
+  PRIVY_APP_ID?: string;
+  PRIVY_APP_SECRET?: string;
+  PRIVY_VERIFICATION_KEY?: string;
+  
+  // Other
   API_KEY?: string;
 }
 
 // Express Request extension for custom properties
+// Note: The 'user' property is now defined in src/types/auth.ts
+// to support the authentication system
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        id: string;
-        privyId: string;
-        email?: string;
-        role?: string;
-      };
       session?: {
         id: string;
         userId: string;

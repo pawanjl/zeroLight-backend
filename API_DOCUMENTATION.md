@@ -13,6 +13,10 @@ http://localhost:3000
 ## Table of Contents
 
 - [Authentication](#authentication)
+  - [Login](#login)
+  - [Refresh Token](#refresh-token)
+  - [Logout](#logout)
+  - [Get Current User](#get-current-user)
 - [User Management](#user-management)
 - [Session Management](#session-management)
 - [Notification Preferences](#notification-preferences)
@@ -25,13 +29,266 @@ http://localhost:3000
 
 ## Authentication
 
-Currently, all endpoints are public. Add authentication middleware as needed.
+The API uses a two-tier authentication system:
+
+1. **Initial Authentication**: Frontend authenticates with Privy and obtains a Privy access token
+2. **Backend JWT**: Exchange Privy token for backend JWT tokens (access + refresh)
+3. **Subsequent Requests**: Use JWT access token in Authorization header
+
+### Authentication Flow
+
+```
+1. User logs in via Privy on frontend → gets Privy token
+2. Frontend sends Privy token to POST /api/auth/login
+3. Backend verifies Privy token and issues JWT tokens
+4. Frontend stores JWT tokens and uses access token for API calls
+5. When access token expires, use refresh token to get new one
+```
+
+### Authorization Header Format
+
+For protected endpoints, include the JWT access token in the Authorization header:
+
+```
+Authorization: Bearer <your-access-token>
+```
+
+### Token Expiration
+
+- **Access Token**: 1 hour (configurable via JWT_EXPIRES_IN)
+- **Refresh Token**: 7 days (configurable via JWT_REFRESH_EXPIRES_IN)
+
+---
+
+### Login
+
+Exchange Privy access token for backend JWT tokens.
+
+**Endpoint:** `POST /api/auth/login`
+
+**Access:** Public
+
+**Request Body:**
+```json
+{
+  "privyToken": "string (required) - Privy access token from frontend",
+  "deviceId": "string (optional) - Unique device identifier",
+  "deviceName": "string (optional) - Human-readable device name",
+  "platform": "string (optional) - Platform: web, ios, android"
+}
+```
+
+**Curl Example:**
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "privyToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "deviceId": "device-uuid-123",
+    "deviceName": "iPhone 14 Pro",
+    "platform": "ios"
+  }'
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "privyId": "did:privy:clxxx...",
+      "email": "user@example.com",
+      "phone": "+1234567890",
+      "walletAddress": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+      "displayName": "John Doe",
+      "profilePictureUrl": "https://..."
+    },
+    "tokens": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "expiresIn": 3600,
+      "tokenType": "Bearer"
+    }
+  },
+  "message": "Login successful",
+  "timestamp": "2025-11-06T10:30:00.000Z"
+}
+```
+
+**Error Response (401):**
+```json
+{
+  "success": false,
+  "error": "Invalid Privy token",
+  "message": "Token verification failed"
+}
+```
+
+---
+
+### Refresh Token
+
+Refresh an expired access token using a valid refresh token.
+
+**Endpoint:** `POST /api/auth/refresh`
+
+**Access:** Public
+
+**Request Body:**
+```json
+{
+  "refreshToken": "string (required) - Refresh token from login"
+}
+```
+
+**Curl Example:**
+```bash
+curl -X POST http://localhost:3000/api/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }'
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "tokens": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "expiresIn": 3600,
+      "tokenType": "Bearer"
+    }
+  },
+  "message": "Token refreshed successfully",
+  "timestamp": "2025-11-06T10:30:00.000Z"
+}
+```
+
+**Error Response (401):**
+```json
+{
+  "success": false,
+  "error": "Unauthorized",
+  "message": "Invalid or expired refresh token"
+}
+```
+
+---
+
+### Logout
+
+Logout user and optionally terminate a specific session.
+
+**Endpoint:** `POST /api/auth/logout`
+
+**Access:** Protected (requires valid access token)
+
+**Request Body:**
+```json
+{
+  "sessionId": "string (optional) - Session ID to terminate"
+}
+```
+
+**Curl Example:**
+```bash
+curl -X POST http://localhost:3000/api/auth/logout \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "sessionId": "550e8400-e29b-41d4-a716-446655440001"
+  }'
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Logged out successfully",
+  "timestamp": "2025-11-06T10:30:00.000Z"
+}
+```
+
+**Error Response (401):**
+```json
+{
+  "success": false,
+  "error": "Unauthorized",
+  "message": "Authentication required"
+}
+```
+
+---
+
+### Get Current User
+
+Get details of the currently authenticated user.
+
+**Endpoint:** `GET /api/auth/me`
+
+**Access:** Protected (requires valid access token)
+
+**Curl Example:**
+```bash
+curl -X GET http://localhost:3000/api/auth/me \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "privyId": "did:privy:clxxx...",
+    "email": "user@example.com",
+    "phone": "+1234567890",
+    "walletAddress": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+    "displayName": "John Doe",
+    "profilePictureUrl": "https://...",
+    "status": "active",
+    "createdAt": "2025-10-16T21:59:48.562Z",
+    "lastActiveAt": "2025-11-06T10:30:00.000Z",
+    "activeSessions": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440001",
+        "deviceName": "iPhone 14 Pro",
+        "platform": "ios",
+        "lastActivityAt": "2025-11-06T10:30:00.000Z"
+      }
+    ],
+    "notificationPreferences": {
+      "pushEnabled": true,
+      "emailEnabled": true
+    }
+  },
+  "timestamp": "2025-11-06T10:30:00.000Z"
+}
+```
+
+**Error Response (401):**
+```json
+{
+  "success": false,
+  "error": "Unauthorized",
+  "message": "Authentication required"
+}
+```
 
 ---
 
 ## User Management
 
 Base path: `/api/v1/users`
+
+**Note:** All User Management endpoints require authentication. Include the JWT access token in the Authorization header:
+```
+Authorization: Bearer <your-access-token>
+```
 
 ### Create User
 
@@ -363,6 +620,11 @@ curl -X DELETE http://localhost:3000/api/v1/users/{userId}
 ## Session Management
 
 Base path: `/api/v1/sessions`
+
+**Note:** All Session Management endpoints require authentication. Include the JWT access token in the Authorization header:
+```
+Authorization: Bearer <your-access-token>
+```
 
 ### Create Session
 
@@ -815,6 +1077,11 @@ curl -X GET http://localhost:3000/api/v1/sessions/user/{userId}/stats
 ## Notification Preferences
 
 Base path: `/api/v1/notifications`
+
+**Note:** All Notification Preferences endpoints require authentication. Include the JWT access token in the Authorization header:
+```
+Authorization: Bearer <your-access-token>
+```
 
 ### Get Notification Preferences
 
