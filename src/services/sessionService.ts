@@ -56,7 +56,39 @@ export interface SessionResponse {
   terminationReason: string | null;
 }
 
-const DEFAULT_SESSION_EXPIRY_DAYS = 30;
+const DEFAULT_SESSION_EXPIRY_DAYS = 90;
+
+/**
+ * Check if session is about to expire and extend it if necessary
+ */
+const checkAndExtendSession = async (session: SessionResponse): Promise<SessionResponse> => {
+  // Check if session is about to expire (within 30 days)
+  const thirtyDaysFromNow = new Date();
+  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+  if (session.expiresAt < thirtyDaysFromNow) {
+    console.log(`   🔄 [Session] Session expiring soon (expires: ${session.expiresAt.toISOString()}), extending by 90 days`);
+
+    try {
+      const newExpiresAt = new Date();
+      newExpiresAt.setDate(newExpiresAt.getDate() + 90);
+
+      await prisma.session.update({
+        where: { id: session.id },
+        data: {
+          expiresAt: newExpiresAt,
+          lastActivityAt: new Date()
+        }
+      });
+
+      // Update the session object in memory to return the new expiry
+      (session as any).expiresAt = newExpiresAt;
+    } catch (error) {
+      console.error(`   ❌ [Session] Failed to extend session expiry:`, error);
+    }
+  }
+  return session;
+};
 
 /**
  * Get existing session or create new one (RECOMMENDED)
@@ -279,6 +311,8 @@ export const getSessionById = async (
       };
     }
 
+    await checkAndExtendSession(session as SessionResponse);
+
     return {
       data: session as SessionResponse,
       error: null,
@@ -332,6 +366,8 @@ export const getActiveSession = async (
         success: false
       };
     }
+
+    await checkAndExtendSession(session as SessionResponse);
 
     return {
       data: session as SessionResponse,
@@ -402,6 +438,8 @@ export const updateSession = async (
       data: updateData
     });
 
+    await checkAndExtendSession(session as SessionResponse);
+
     return {
       data: session as SessionResponse,
       error: null,
@@ -460,6 +498,8 @@ export const updatePushToken = async (
         lastActivityAt: new Date()
       }
     });
+
+    await checkAndExtendSession(session as SessionResponse);
 
     return {
       data: session as SessionResponse,
